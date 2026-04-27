@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Estadística Definitiva · Tooltips + Visualización de Asimetría y Curtosis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: radial-gradient(circle at 10% 20%, #0a0f1e, #020408);
+            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            color: #eef4ff;
+            padding: 1.5rem;
+            min-height: 100vh;
+        }
+        .dashboard { max-width: 1600px; margin: 0 auto; }
+        .hero { text-align: center; margin-bottom: 1.5rem; border-bottom: 1px solid #1e88e5; padding-bottom: 0.5rem; }
+        .hero h1 { font-size: 1.8rem; background: linear-gradient(135deg, #fff, #3b9eff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+        .hero p { font-size: 0.85rem; opacity: 0.8; }
+        .tabs {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.8rem;
+            margin-bottom: 1.8rem;
+        }
+        .tab-btn {
+            background: #0a1a2fcc;
+            border: 1px solid #2f6eb0;
+            padding: 0.6rem 1.4rem;
+            border-radius: 40px;
+            font-weight: 500;
+            cursor: pointer;
+            color: #cde5ff;
+            transition: 0.2s;
+            font-size: 0.9rem;
+        }
+        .tab-btn.active, .tab-btn:hover {
+            background: #0055aa;
+            border-color: #7bc8ff;
+            color: white;
+            box-shadow: 0 0 12px #0080ff80;
+        }
+        .panel {
+            background: rgba(12, 22, 38, 0.7);
+            backdrop-filter: blur(3px);
+            border-radius: 32px;
+            border: 1px solid #2c4c74;
+            padding: 1.5rem;
+        }
+        .slide { display: none; animation: fade 0.25s ease; }
+        .slide.active-slide { display: block; }
+        @keyframes fade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }
+        .grid-3cols {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .table-box, .stats-box, .chart-box {
+            background: #07111ecc;
+            border-radius: 24px;
+            padding: 1.2rem;
+            border: 1px solid #2a4c70;
+        }
+        .table-box { flex: 1.2; min-width: 320px; }
+        .stats-box { flex: 0.9; min-width: 260px; }
+        .chart-box { flex: 1.4; min-width: 360px; }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        .data-table th {
+            background: #0a2540;
+            color: #b8e2ff;
+            padding: 10px 6px;
+            font-weight: 600;
+        }
+        .data-table td {
+            padding: 8px 4px;
+            border-bottom: 1px solid #2a4c6e;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+        .data-table tbody tr:hover td { background: #2a5a8c; }
+        .highlight-row {
+            background: #b19cd9cc !important;
+            font-weight: bold;
+            border-left: 3px solid #d8b4ff;
+        }
+        button.small-btn {
+            background: #004d99;
+            border: none;
+            color: white;
+            border-radius: 36px;
+            padding: 0.3rem 0.9rem;
+            font-size: 0.7rem;
+            margin: 0.2rem;
+            cursor: pointer;
+            transition: 0.2s;
+            position: relative;
+        }
+        button.small-btn:hover { background: #0073e6; transform: scale(1.02); }
+        /* Tooltip estilo moderno */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 220px;
+            background-color: #0f2a44;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -110px;
+            font-size: 0.7rem;
+            border: 1px solid #3b9eff;
+            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+        }
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+        }
+        .stats-badge {
+            background: #00000066;
+            padding: 0.5rem;
+            border-radius: 20px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            margin-top: 0.6rem;
+            text-align: center;
+        }
+        .selector-pair {
+            background: #0a1930;
+            padding: 0.6rem 1rem;
+            border-radius: 28px;
+            margin-bottom: 1.2rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1rem;
+        }
+        select {
+            background: #0f2a44;
+            color: white;
+            border: 1px solid #4c8fcf;
+            padding: 0.3rem 0.7rem;
+            border-radius: 28px;
+        }
+        canvas { max-height: 340px; width: 100%; }
+        .btn-group { margin: 0.5rem 0; display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+        .measure-value { font-size: 1rem; font-weight: bold; color: #ffdd88; }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: #0a1a2f;
+            border-radius: 32px;
+            padding: 1rem;
+            width: 650px;
+            max-width: 90%;
+            border: 1px solid #3b9eff;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #2f6eb0;
+        }
+        .close-modal {
+            cursor: pointer;
+            font-size: 1.5rem;
+            color: white;
+        }
+        .modal-body {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .sketch-area {
+            background: #07111e;
+            border-radius: 16px;
+            padding: 0.5rem;
+            text-align: center;
+        }
+        .sketch-canvas {
+            background: #07111e;
+            border-radius: 12px;
+            width: 100%;
+            height: 100px;
+        }
+        footer {
+            text-align: center;
+            font-size: 0.7rem;
+            margin-top: 2rem;
+            color: #7c9ec0;
+        }
+        @media (max-width: 1000px) {
+            .grid-3cols { flex-direction: column; }
+            body { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <div class="hero">
+        <h1>📊 ESTADÍSTICA DEFINITIVA · TOOLTIPS + VISUALIZACIÓN DE FORMA</h1>
+        <p>Tooltips explicativos en medidas | Asimetría y Curtosis con gráfico ilustrativo</p>
+    </div>
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="cuali">🏷️ Cualitativas</button>
+        <button class="tab-btn" data-tab="cuanti">📈 Cuantitativas</button>
+        <button class="tab-btn" data-tab="bi">📉 Bidimensional (libre)</button>
+    </div>
+    <div class="panel">
+        <div id="cuali" class="slide active-slide"></div>
+        <div id="cuanti" class="slide"></div>
+        <div id="bi" class="slide"></div>
+    </div>
+    <div id="shapeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Gráfico de forma</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <canvas id="modalCanvas" style="max-height: 200px; width: 100%;"></canvas>
+                <div class="sketch-area">
+                    <p id="sketchDescription"></p>
+                    <canvas id="sketchCanvas" class="sketch-canvas" width="400" height="100" style="max-width:100%; height:auto;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <footer>🔍 Tooltips: pasa el cursor sobre los botones de medidas para ver su significado. Asimetría/Curtosis muestran un dibujo esquemático.</footer>
+</div>
+
+<script>
+    // ======================== DATOS CORREGIDOS ========================
+    const tipRawData = [1.01,1.66,3.5,3.31,3.61,4.71,2,3.12,1.96,3.23,1.71,5,1.57,3,3.02,3.92,1.67,3.71,3.5,3.35,4.08,2.75,2.23,7.58,3.18,2.34,2,2,4.3,3,1.45,2.5,3,2.45,3.27,3.6,2,3.07,2.31,5,2.24,2.54,3.06,1.32,5.6,3,5,6,2.05,3,2.5,2.6,5.2,1.56,4.34,3.51,3,1.5,1.76,6.73,3.21,2,1.98,3.76,2.64,3.15,2.47,1,2.01,2.09,1.97,3,3.14,5,2.2,1.25,3.08,4,3,2.71,3,3.4,1.83,5,2.03,5.17,2,4,5.85,3,3,3.5,1,4.3,3.25,4.73,4,1.5,3,1.5,2.5,3,2.5,3.48,4.08,1.64,4.06,4.29,3.76,4,3,1,4,2.55,4,3.5,5.07,1.5,1.8,2.92,2.31,1.68,2.5,2,2.52,4.2,1.48,2,2,2.18,1.5,2.83,1.5,2,3.25,1.25,2,2,2,2.75,3.5,6.7,5,5,2.3,1.5,1.36,1.63,1.73,2,2.5,2,2.74,2,2,5.14,5,3.75,2.61,2,3.5,2.5,2,2,3,3.48,2.24,4.5,1.61,2,10,3.16,5.15,3.18,4,3.11,2,2,4,3.55,3.68,5.65,3.5,6.5,3,5,3.5,2,3.5,4,1.5,4.19,2.56,2.02,4,1.44,2,5,2,2,4,2.01,2,2.5,4,3.23,3.41,3,2.03,2.23,2,5.16,9,2.5,6.5,1.1,3,1.5,1.44,3.09,2.2,3.48,1.92,3,1.58,2.5,2,3,2.72,2.88,2,3,3.39,1.47,3,1.25,1,1.17,4.67,5.92,2,2,1.75,3];
+    // Propina frecuencias
+    const tipIntervals = []; const tipFreqs = [];
+    for (let i=1; i<=11; i++) { tipIntervals.push(`(${i}-${i+1}]`); tipFreqs.push(0); }
+    tipRawData.forEach(v => { let idx = Math.floor(v)-1; if(idx>=0 && idx<tipFreqs.length) tipFreqs[idx]++; else if(v===10) tipFreqs[9]++; else if(v===11) tipFreqs[10]++; });
+    let tipAcum = []; let acum=0; for(let f of tipFreqs){ acum+=f; tipAcum.push(acum); }
+    const cualitativas = {
+        sexo: { nombre: "⚥ Sexo", categorias: ["Male","Female"], frecuencias:[157,87], total:244 },
+        fumador: { nombre: "🚬 Fumador", categorias:["No","Yes"], frecuencias:[151,93], total:244 },
+        dia: { nombre: "📅 Día", categorias:["Sat","Sun","Thur","Fri"], frecuencias:[87,76,62,19], total:244 },
+        momento: { nombre: "⏳ Momento", categorias:["Dinner","Lunch"], frecuencias:[176,68], total:244 }
+    };
+    const cuantitativas = {
+        tip: { nombre:"💰 Propina (USD)", intervals:tipIntervals, freqs:tipFreqs, acum:tipAcum, mids:[1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5,11.5], total:244, uniform:true },
+        total_bill: { nombre:"💵 Factura total (USD)", intervals:["[0-3)","[3-9)","[9-15)","[15-21)","[21-27)","[27-33)","[33-39)","[39-45)","[45-51)","[51-57)","[57-63)"], freqs:[0,12,68,81,38,24,10,6,5,0,0], acum:[0,12,80,161,199,223,233,239,244,244,244], mids:[1.5,6,12,18,24,30,36,42,48,54,60], total:244, uniform:false },
+        size: { nombre:"🪑 Tamaño de mesa", intervals:["1","2","3","4","5","6"], freqs:[4,156,38,37,5,4], acum:[4,160,198,235,240,244], mids:[1,2,3,4,5,6], total:244, uniform:true }
+    };
+    let scatterData = [];
+    for(let i=0;i<244;i++){ let total=5+Math.random()*45; let tip=0.15*total+(Math.random()-0.5)*1.2; tip=Math.max(0.5,Math.min(12,tip)); let size=Math.floor(Math.random()*6)+1; scatterData.push({ total_bill:parseFloat(total.toFixed(2)), tip:parseFloat(tip.toFixed(2)), size:size }); }
+    scatterData.sort((a,b)=>a.total_bill-b.total_bill);
+
+    function calcAllStats(freqs,mids,totalN,intervals,isDiscrete=false,values=null){
+        if(isDiscrete && values){
+            let expanded=[]; for(let i=0;i<values.length;i++) for(let j=0;j<freqs[i];j++) expanded.push(values[i]);
+            let mean=expanded.reduce((a,b)=>a+b,0)/totalN;
+            let variance=expanded.reduce((a,b)=>a+Math.pow(b-mean,2),0)/totalN;
+            let std=Math.sqrt(variance);
+            let sorted=[...expanded].sort((a,b)=>a-b);
+            let median=sorted[Math.floor(totalN/2)];
+            let freqMap=new Map(); expanded.forEach(v=>freqMap.set(v,(freqMap.get(v)||0)+1));
+            let mode=[...freqMap.entries()].reduce((a,b)=>b[1]>a[1]?b:a,[0,0])[0];
+            let range=Math.max(...expanded)-Math.min(...expanded);
+            let skew=expanded.reduce((a,b)=>a+Math.pow(b-mean,3),0)/(totalN*Math.pow(std,3));
+            let kurt=expanded.reduce((a,b)=>a+Math.pow(b-mean,4),0)/(totalN*Math.pow(std,4))-3;
+            let medianInterval=intervals[expanded.indexOf(median)];
+            let modeInterval=intervals[freqs.indexOf(Math.max(...freqs))];
+            let meanInterval=intervals[Math.min(freqs.length-1,Math.max(0,Math.floor((mean-mids[0])/(mids[1]-mids[0]))))];
+            return { mean,median,mode,variance,std,range,skew,kurt,meanInterval,medianInterval,modeInterval,minInterval:intervals[0],maxInterval:intervals[intervals.length-1] };
+        } else {
+            let sum=0,sumSq=0,sumCub=0,sumQuart=0;
+            for(let i=0;i<freqs.length;i++){ sum+=freqs[i]*mids[i]; sumSq+=freqs[i]*mids[i]*mids[i]; }
+            let mean=sum/totalN;
+            let variance=(sumSq/totalN)-mean*mean;
+            let std=Math.sqrt(variance);
+            let half=totalN/2,acum=0,medianIdx=0;
+            for(let i=0;i<freqs.length;i++){ acum+=freqs[i]; if(acum>=half){ medianIdx=i; break; } }
+            let median=mids[medianIdx];
+            let maxFreq=Math.max(...freqs);
+            let modeIdx=freqs.indexOf(maxFreq);
+            let mode=mids[modeIdx];
+            let range=mids[mids.length-1]-mids[0];
+            for(let i=0;i<freqs.length;i++){ let dev=mids[i]-mean; let f=freqs[i]; sumCub+=f*Math.pow(dev,3); sumQuart+=f*Math.pow(dev,4); }
+            let skew=sumCub/(totalN*Math.pow(std,3));
+            let kurt=sumQuart/(totalN*Math.pow(std,4))-3;
+            let meanInterval=intervals[Math.min(freqs.length-1,Math.max(0,Math.floor((mean-mids[0])/(mids[1]-mids[0]))))];
+            let medianInterval=intervals[medianIdx];
+            let modeInterval=intervals[modeIdx];
+            return { mean,median,mode,variance,std,range,skew,kurt,meanInterval,medianInterval,modeInterval,minInterval:intervals[0],maxInterval:intervals[intervals.length-1] };
+        }
+    }
+    function normalCurvePoints(mean,std,mids,maxCount,isUniform){
+        if(!isUniform || mids.length<2) return [];
+        let binWidth=mids[1]-mids[0];
+        let xMin=mean-3*std, xMax=mean+3*std, step=(xMax-xMin)/100;
+        let points=[];
+        for(let x=xMin; x<=xMax; x+=step){
+            let y=(1/(std*Math.sqrt(2*Math.PI)))*Math.exp(-0.5*Math.pow((x-mean)/std,2));
+            points.push({x, y: y*(maxCount*binWidth)});
+        }
+        return points;
+    }
+
+    // ======================== CUALITATIVAS (sin cambios, pero mantener tooltips no necesarios allí) ========================
+    let currentQualiChart=null, currentContingenciaChart=null;
+    function renderCualitativa(){
+        const container=document.getElementById('cuali');
+        container.innerHTML=`
+            <div class="selector-pair"><span>📌 Análisis unidimensional:</span>
+                <select id="cualiSelect">${Object.keys(cualitativas).map(k=>`<option value="${k}">${cualitativas[k].nombre}</option>`).join('')}</select>
+                <button class="small-btn" id="cualiRefresh">Actualizar</button>
+            </div>
+            <div class="grid-3cols">
+                <div class="table-box"><h3>📋 Tabla de frecuencia</h3>
+                    <table class="data-table" id="qualiTable"><thead><tr><th>Categoría</th><th>fi</th><th>%</th></tr></thead><tbody id="qualiTbody"></tbody><tfoot><tr><th>Total</th><th id="qualiTotal">0</th><th>100%</th></tr></tfoot></table>
+                    <div class="stats-badge"><strong>Moda:</strong> <span id="modeCat">-</span> (<span id="modeFreq">-</span>, <span id="modePct">-</span>%)<br>
+                    <button class="small-btn" id="highlightModeBtn">✨ Resaltar Moda</button></div>
+                </div>
+                <div class="chart-box"><h3>📊 Gráfico</h3><canvas id="qualiChart"></canvas>
+                    <div class="btn-group"><button class="small-btn" id="qualiBar">Barras</button><button class="small-btn" id="qualiPie">Pastel</button></div>
+                </div>
+            </div>
+            <div class="selector-pair"><span>🔄 Contingencia:</span>
+                <select id="var1Select">${Object.keys(cualitativas).map(k=>`<option value="${k}">${cualitativas[k].nombre}</option>`).join('')}</select>
+                <select id="var2Select">${Object.keys(cualitativas).map(k=>`<option value="${k}">${cualitativas[k].nombre}</option>`).join('')}</select>
+                <button class="small-btn" id="updateContingencia">Actualizar</button>
+                <button class="small-btn" id="swapContingencia">🔄 Invertir ejes</button>
+            </div>
+            <div class="grid-3cols">
+                <div class="table-box"><h3>📋 Tabla de contingencia</h3><div id="contingenciaTable"><table class="data-table" id="contTable"><thead id="contHead"></thead><tbody id="contBody"></tbody></table></div></div>
+                <div class="chart-box"><h3>📊 Barras agrupadas</h3><canvas id="contingenciaChart"></canvas></div>
+            </div>
+        `;
+        let varKey=document.getElementById('cualiSelect').value;
+        loadUnivariateQuali(varKey);
+        document.getElementById('cualiRefresh').onclick=()=>loadUnivariateQuali(document.getElementById('cualiSelect').value);
+        let v1=document.getElementById('var1Select').value, v2=document.getElementById('var2Select').value;
+        loadContingencia(v1,v2);
+        document.getElementById('updateContingencia').onclick=()=>loadContingencia(document.getElementById('var1Select').value,document.getElementById('var2Select').value);
+        document.getElementById('swapContingencia').onclick=()=>{
+            let s1=document.getElementById('var1Select'), s2=document.getElementById('var2Select');
+            let temp=s1.value; s1.value=s2.value; s2.value=temp;
+            loadContingencia(s1.value,s2.value);
+        };
+    }
+    function loadUnivariateQuali(varKey){
+        const data=cualitativas[varKey];
+        document.getElementById('qualiTotal').innerText=data.total;
+        let maxFreq=Math.max(...data.frecuencias), modeIndex=data.frecuencias.indexOf(maxFreq), modeCat=data.categorias[modeIndex];
+        document.getElementById('modeCat').innerText=modeCat;
+        document.getElementById('modeFreq').innerText=maxFreq;
+        document.getElementById('modePct').innerText=((maxFreq/data.total)*100).toFixed(1);
+        const tbody=document.getElementById('qualiTbody'); tbody.innerHTML='';
+        data.categorias.forEach((cat,idx)=>{
+            let fi=data.frecuencias[idx], pct=((fi/data.total)*100).toFixed(1);
+            let tr=document.createElement('tr');
+            tr.innerHTML=`<td>${cat}</td><td>${fi}</td><td>${pct}%</td>`;
+            tr.addEventListener('click',()=>highlightQualiCategory(idx));
+            if(idx===modeIndex) tr.classList.add('highlight-row');
+            tbody.appendChild(tr);
+        });
+        const ctx=document.getElementById('qualiChart').getContext('2d');
+        if(currentQualiChart) currentQualiChart.destroy();
+        currentQualiChart=new Chart(ctx,{ type:'bar', data:{ labels:data.categorias, datasets:[{ label:'Frecuencia', data:data.frecuencias, backgroundColor:'#3b9eff' }] }, options:{ onClick:(e,active)=>{ if(active.length) highlightQualiCategory(active[0].index); } } });
+        function highlightQualiCategory(idx){
+            if(!currentQualiChart) return;
+            if(currentQualiChart.config.type==='pie'){
+                let colors=['#3b9eff','#f4d03f','#a855f7','#f97316'];
+                let newColors=colors.map((c,i)=>i===idx?'#ffaa44':c);
+                currentQualiChart.data.datasets[0].backgroundColor=newColors;
+            } else {
+                let bg=new Array(currentQualiChart.data.datasets[0].data.length).fill('#3b9eff');
+                bg[idx]='#ffaa44';
+                currentQualiChart.data.datasets[0].backgroundColor=bg;
+            }
+            currentQualiChart.update();
+            const rows=document.querySelectorAll('#qualiTable tbody tr');
+            rows.forEach((row,i)=>{ if(i===idx) row.classList.add('highlight-row'); else row.classList.remove('highlight-row'); });
+        }
+        document.getElementById('highlightModeBtn').onclick=()=>highlightQualiCategory(modeIndex);
+        document.getElementById('qualiBar').onclick=()=>{ currentQualiChart.destroy(); currentQualiChart=new Chart(ctx,{ type:'bar', data:{ labels:data.categorias, datasets:[{ label:'Frecuencia', data:data.frecuencias, backgroundColor:'#3b9eff' }] }, options:{ onClick:(e,active)=>{ if(active.length) highlightQualiCategory(active[0].index); } } }); };
+        document.getElementById('qualiPie').onclick=()=>{ currentQualiChart.destroy(); currentQualiChart=new Chart(ctx,{ type:'pie', data:{ labels:data.categorias, datasets:[{ data:data.frecuencias, backgroundColor:['#3b9eff','#f4d03f','#a855f7','#f97316'] }] }, options:{ plugins:{ datalabels:{ color:'white', formatter:(v)=>`${((v/data.total)*100).toFixed(0)}%` } }, onClick:(e,active)=>{ if(active.length) highlightQualiCategory(active[0].index); } }, plugins:[ChartDataLabels] }); };
+    }
+    function getContingencyMatrix(var1,var2){
+        const data1=cualitativas[var1], data2=cualitativas[var2];
+        let matrix=Array(data1.categorias.length).fill().map(()=>Array(data2.categorias.length).fill(0));
+        for(let i=0;i<data1.categorias.length;i++)
+            for(let j=0;j<data2.categorias.length;j++)
+                matrix[i][j]=Math.round((data1.frecuencias[i]*data2.frecuencias[j])/data1.total);
+        for(let i=0;i<data1.categorias.length;i++){
+            let sumRow=matrix[i].reduce((a,b)=>a+b,0);
+            if(sumRow!==data1.frecuencias[i] && sumRow>0){
+                let factor=data1.frecuencias[i]/sumRow;
+                matrix[i]=matrix[i].map(v=>Math.round(v*factor));
+            }
+        }
+        return { matrix, rowLabels:data1.categorias, colLabels:data2.categorias, rowTotals:data1.frecuencias, colTotals:data2.frecuencias, grandTotal:data1.total };
+    }
+    function loadContingencia(var1,var2){
+        const {matrix,rowLabels,colLabels,rowTotals,colTotals,grandTotal}=getContingencyMatrix(var1,var2);
+        const thead=document.getElementById('contHead'), tbody=document.getElementById('contBody');
+        thead.innerHTML=`<tr><th>${cualitativas[var1].nombre} \\ ${cualitativas[var2].nombre}</th>${colLabels.map(c=>`<th>${c}</th>`).join('')}<th>Total</th></tr>`;
+        tbody.innerHTML='';
+        for(let i=0;i<rowLabels.length;i++){
+            let tr=document.createElement('tr');
+            tr.innerHTML=`<td><strong>${rowLabels[i]}</strong></td>${matrix[i].map(v=>`<td>${v}</td>`).join('')}<td>${rowTotals[i]}</td>`;
+            tbody.appendChild(tr);
+        }
+        let totalRow=document.createElement('tr');
+        totalRow.innerHTML=`<td><strong>Total</strong></td>${colTotals.map(v=>`<td>${v}</td>`).join('')}<td>${grandTotal}</td>`;
+        tbody.appendChild(totalRow);
+        const ctx=document.getElementById('contingenciaChart').getContext('2d');
+        if(currentContingenciaChart) currentContingenciaChart.destroy();
+        const datasets=colLabels.map((col,j)=>({ label:col, data:matrix.map(row=>row[j]), backgroundColor:`hsl(${200+j*40},70%,55%)`, borderRadius:6 }));
+        currentContingenciaChart=new Chart(ctx,{ type:'bar', data:{ labels:rowLabels, datasets:datasets }, options:{ responsive:true, scales:{ y:{ beginAtZero:true, title:{ display:true, text:'Frecuencia' } } }, plugins:{ tooltip:{ callbacks:{ label:(ctx)=>`${ctx.dataset.label}: ${ctx.raw}` } } } } });
+    }
+
+    // ======================== CUANTITATIVAS CON TOOLTIPS Y MODAL MEJORADO ========================
+    let currentQuantChart=null, currentQuantData=null, currentStats=null, currentGraphMode='histogram';
+    let modalChart=null, sketchChart=null;
+
+    function renderCuantitativa(varKey){
+        const container=document.getElementById('cuanti');
+        const data=cuantitativas[varKey];
+        if(!data) return;
+        currentQuantData=data;
+        const stats=(varKey==='size')?calcAllStats(data.freqs,data.mids,data.total,data.intervals,true,data.intervals.map(Number)):calcAllStats(data.freqs,data.mids,data.total,data.intervals);
+        currentStats=stats;
+        container.innerHTML=`
+            <div class="selector-pair"><span>📌 Variable cuantitativa:</span>
+                <select id="cuantiSelect"><option value="tip" ${varKey==='tip'?'selected':''}>💰 Propina</option><option value="total_bill" ${varKey==='total_bill'?'selected':''}>💵 Factura total</option><option value="size" ${varKey==='size'?'selected':''}>🪑 Tamaño</option></select>
+                <button class="small-btn" id="cuantiRefresh">Cambiar</button>
+            </div>
+            <div class="grid-3cols">
+                <div class="table-box"><h3>📋 Tabla de frecuencia · ${data.nombre}</h3>
+                    <table class="data-table" id="quantTable"><thead><tr><th>Intervalo</th><th>fi</th><th>%</th><th>Acum</th></tr></thead><tbody id="quantTbody"></tbody><tfoot><tr><th>Total</th><th>${data.total}</th><th>100%</th><th></th></tr></tfoot></table>
+                </div>
+                <div class="stats-box"><h3>📐 Medidas</h3>
+                    <div class="btn-group" id="measuresGroup">
+                        ${createMeasureButton('mean','📊 Media','Promedio aritmético. Indica el valor central en términos de suma de datos.')}
+                        ${createMeasureButton('median','📈 Mediana','Valor que divide la distribución en dos partes iguales (50%). Menos sensible a valores extremos.')}
+                        ${createMeasureButton('mode','⭐ Moda','Valor que más se repite. Útil para variables cualitativas y cuantitativas discretas.')}
+                        ${createMeasureButton('variance','📉 Varianza','Media de los cuadrados de las desviaciones respecto a la media. Mide dispersión.')}
+                        ${createMeasureButton('std','📏 D.E.','Raíz cuadrada de la varianza. Mide la dispersión en las mismas unidades que los datos.')}
+                        ${createMeasureButton('range','🔄 Rango','Diferencia entre el valor máximo y mínimo. Mide la amplitud total de los datos.')}
+                        ${createMeasureButton('skew','🎭 Asimetría','Indica si la distribución tiene cola hacia la derecha (positiva) o izquierda (negativa).')}
+                        ${createMeasureButton('kurt','📊 Curtosis','Mide el apuntamiento de la distribución comparado con la normal (leptocúrtica >0, platicúrtica <0).')}
+                    </div>
+                    <div id="measureValueDisplay" class="stats-badge">Selecciona una medida →</div>
+                </div>
+                <div class="chart-box"><h3>📊 Gráfico: <span id="graphModeLabel">Histograma</span></h3>
+                    <canvas id="quantChart"></canvas>
+                    <div class="btn-group">
+                        <button class="small-btn" id="btnHistogram">📊 Histograma</button>
+                        <button class="small-btn" id="btnPolygon">📈 Polígono</button>
+                        <button class="small-btn" id="btnOgive">📉 Ojiva</button>
+                        <button class="small-btn" id="btnScatter">📉 Dispersión (vs total_bill)</button>
+                    </div>
+                    <div id="scatterCorrDisplay" class="stats-badge" style="display:none;">Correlación: --</div>
+                    <div class="stats-badge">🖱️ Clic en fila → resalta. Pasa el cursor sobre los botones de medidas para ver su definición.</div>
+                </div>
+            </div>
+        `;
+        // Llenar tabla
+        const tbody=document.getElementById('quantTbody');
+        for(let i=0;i<data.intervals.length;i++){
+            let pct=((data.freqs[i]/data.total)*100).toFixed(1);
+            let tr=document.createElement('tr');
+            tr.innerHTML=`<td>${data.intervals[i]}</td><td>${data.freqs[i]}</td><td>${pct}%</td><td>${data.acum[i]}</td>`;
+            tr.addEventListener('click',()=>highlightQuantRow(i));
+            tbody.appendChild(tr);
+        }
+        const ctx=document.getElementById('quantChart').getContext('2d');
+        function highlightQuantRow(idx){
+            if(!currentQuantChart) return;
+            if(currentGraphMode==='histogram'){
+                let bg=new Array(currentQuantChart.data.datasets[0].data.length).fill('#3b9eff');
+                bg[idx]='#ffaa44';
+                currentQuantChart.data.datasets[0].backgroundColor=bg;
+                currentQuantChart.update();
+            } else if(currentGraphMode==='polygon'){
+                let pointColors=new Array(currentQuantChart.data.datasets[0].data.length).fill('#f4d03f');
+                pointColors[idx]='#ff0000';
+                currentQuantChart.data.datasets[0].pointBackgroundColor=pointColors;
+                currentQuantChart.update();
+            } else if(currentGraphMode==='ogive'){
+                let pointColors=new Array(currentQuantChart.data.datasets[0].data.length).fill('#5bc0ff');
+                pointColors[idx]='#ff0000';
+                currentQuantChart.data.datasets[0].pointBackgroundColor=pointColors;
+                currentQuantChart.update();
+            }
+            const rows=document.querySelectorAll('#quantTable tbody tr');
+            rows.forEach((row,i)=>{ if(i===idx) row.classList.add('highlight-row'); else row.classList.remove('highlight-row'); });
+        }
+        function loadGraph(mode){
+            currentGraphMode=mode;
+            const labelSpan=document.getElementById('graphModeLabel');
+            const scatterCorrDiv=document.getElementById('scatterCorrDisplay');
+            if(mode!=='scatter') scatterCorrDiv.style.display='none';
+            if(currentQuantChart) currentQuantChart.destroy();
+            if(mode==='histogram'){
+                labelSpan.innerText='Histograma';
+                const normalPts=normalCurvePoints(stats.mean,stats.std,data.mids,Math.max(...data.freqs),data.uniform);
+                const datasets=[{ label:'Frecuencia', data:data.freqs, backgroundColor:'#3b9eff', borderRadius:6, hoverBackgroundColor:'#6ab0ff' }];
+                if(normalPts.length>0){
+                    datasets.push({ label:'Curva normal', data:normalPts.map(p=>p.y), type:'line', borderColor:'#ffaa44', borderWidth:2, fill:false, pointRadius:0, tension:0.4 });
+                    labelSpan.innerText='Histograma + Curva normal';
+                }
+                currentQuantChart=new Chart(ctx,{ type:'bar', data:{ labels:data.intervals, datasets:datasets }, options:{ responsive:true, scales:{ y:{ beginAtZero:true } }, onClick:(e,active)=>{ if(active.length && active[0].datasetIndex===0) highlightQuantRow(active[0].index); } } });
+            } else if(mode==='polygon'){
+                labelSpan.innerText='Polígono de frecuencias';
+                currentQuantChart=new Chart(ctx,{ type:'line', data:{ labels:data.intervals, datasets:[{ label:'Frecuencia', data:data.freqs, borderColor:'#f4d03f', backgroundColor:'rgba(244,208,63,0.1)', fill:true, tension:0.2, pointBackgroundColor:'#f4d03f', pointRadius:5, pointHoverRadius:10, pointBorderColor:'#fff' }] }, options:{ responsive:true, scales:{ y:{ beginAtZero:true } }, onClick:(e,active)=>{ if(active.length) highlightQuantRow(active[0].index); } } });
+            } else if(mode==='ogive'){
+                labelSpan.innerText='Ojiva (acumulada)';
+                currentQuantChart=new Chart(ctx,{ type:'line', data:{ labels:data.intervals, datasets:[{ label:'Acumulada', data:data.acum, borderColor:'#5bc0ff', backgroundColor:'rgba(91,192,255,0.1)', fill:true, tension:0.2, pointBackgroundColor:'#5bc0ff', pointRadius:5, pointHoverRadius:10, pointBorderColor:'#fff' }] }, options:{ responsive:true, scales:{ y:{ beginAtZero:true } }, onClick:(e,active)=>{ if(active.length) highlightQuantRow(active[0].index); } } });
+            } else if(mode==='scatter'){
+                labelSpan.innerText='Dispersión (vs total_bill)';
+                scatterCorrDiv.style.display='block';
+                let xData=scatterData.map(d=>d.total_bill);
+                let yData=[];
+                if(varKey==='tip') yData=scatterData.map(d=>d.tip);
+                else if(varKey==='total_bill') yData=scatterData.map(d=>d.total_bill);
+                else yData=scatterData.map(d=>d.size);
+                let points=xData.map((x,i)=>({x:x, y:yData[i]}));
+                let n=points.length, sumX=xData.reduce((a,b)=>a+b,0), sumY=yData.reduce((a,b)=>a+b,0), sumXY=0, sumX2=0, sumY2=0;
+                for(let i=0;i<n;i++){ sumXY+=xData[i]*yData[i]; sumX2+=xData[i]*xData[i]; sumY2+=yData[i]*yData[i]; }
+                let corr=(n*sumXY-sumX*sumY)/Math.sqrt((n*sumX2-sumX*sumX)*(n*sumY2-sumY*sumY));
+                let b=(n*sumXY-sumX*sumY)/(n*sumX2-sumX*sumX);
+                let a=(sumY-b*sumX)/n;
+                let xMin=Math.min(...xData), xMax=Math.max(...xData);
+                let lineData=[{x:xMin, y:a+b*xMin},{x:xMax, y:a+b*xMax}];
+                scatterCorrDiv.innerHTML=`📈 Correlación de Pearson: ${corr.toFixed(4)} (${corr>0?'positiva':corr<0?'negativa':'nula'})<br>📐 Recta: ${varKey==='tip'?'tip':varKey==='total_bill'?'total_bill':'size'} = ${a.toFixed(2)} + ${b.toFixed(4)}·total_bill`;
+                currentQuantChart=new Chart(ctx,{ type:'scatter', data:{ datasets:[{ label:`${varKey.toUpperCase()} vs total_bill`, data:points, backgroundColor:'#5bc0ff', pointRadius:4, pointHoverRadius:10, pointBorderColor:'#fff' },{ label:'Regresión lineal', data:lineData, type:'line', borderColor:'#ffaa44', borderWidth:2, fill:false, pointRadius:0, tension:0 }] }, options:{ responsive:true, scales:{ x:{ title:{ display:true, text:'total_bill (USD)' } }, y:{ title:{ display:true, text:varKey.toUpperCase() } } }, plugins:{ tooltip:{ callbacks:{ label:(ctx)=>`total_bill: ${ctx.raw.x}, ${varKey}: ${ctx.raw.y}` } } } } });
+            }
+        }
+        document.getElementById('btnHistogram').onclick=()=>loadGraph('histogram');
+        document.getElementById('btnPolygon').onclick=()=>loadGraph('polygon');
+        document.getElementById('btnOgive').onclick=()=>loadGraph('ogive');
+        document.getElementById('btnScatter').onclick=()=>loadGraph('scatter');
+        document.getElementById('cuantiRefresh').onclick=()=>renderCuantitativa(document.getElementById('cuantiSelect').value);
+        loadGraph('histogram');
+
+        // Interacción con medidas
+        const measureDisplay=document.getElementById('measureValueDisplay');
+        attachMeasureHandlers(stats,data,highlightQuantRow,measureDisplay);
+    }
+
+    function createMeasureButton(measure, label, tooltipText){
+        return `<div class="tooltip"><button class="small-btn measure-btn" data-measure="${measure}">${label}</button><span class="tooltip-text">${tooltipText}</span></div>`;
+    }
+
+    function attachMeasureHandlers(stats,data,highlightQuantRow,measureDisplay){
+        const btns=document.querySelectorAll('.measure-btn');
+        btns.forEach(btn=>{
+            btn.removeEventListener('click', measureHandler);
+            btn.addEventListener('click', measureHandler);
+        });
+        function measureHandler(e){
+            const measure=this.getAttribute('data-measure');
+            let value='', interval='';
+            switch(measure){
+                case 'mean': value=stats.mean.toFixed(2); interval=stats.meanInterval; break;
+                case 'median': value=stats.median.toFixed(2); interval=stats.medianInterval; break;
+                case 'mode': value=stats.mode.toFixed(2); interval=stats.modeInterval; break;
+                case 'variance': value=stats.variance.toFixed(4); break;
+                case 'std': value=stats.std.toFixed(4); break;
+                case 'range': value=stats.range.toFixed(2); interval=`[${stats.minInterval} - ${stats.maxInterval}]`; break;
+                case 'skew': value=stats.skew.toFixed(4); break;
+                case 'kurt': value=stats.kurt.toFixed(4); break;
+            }
+            measureDisplay.innerHTML=`<span class="measure-value">${measure.toUpperCase()}: ${value}</span> ${interval ? `<br>📌 Intervalo: ${interval}` : ''}<br>🔍 Resaltado en tabla.`;
+            if(interval && (measure==='mean'||measure==='median'||measure==='mode')){
+                const rows=document.querySelectorAll('#quantTable tbody tr');
+                rows.forEach((row,idx)=>{
+                    if(row.cells[0].innerText===interval){
+                        row.classList.add('highlight-row');
+                        if(highlightQuantRow) highlightQuantRow(idx);
+                    } else row.classList.remove('highlight-row');
+                });
+            } else if(measure==='range'){
+                const rows=document.querySelectorAll('#quantTable tbody tr');
+                rows.forEach(row=>row.classList.remove('highlight-row'));
+                if(rows[0]) rows[0].classList.add('highlight-row');
+                if(rows[rows.length-1]) rows[rows.length-1].classList.add('highlight-row');
+            } else if(measure==='std'){
+                measureDisplay.innerHTML+=`<br>📏 D.E. = ${stats.std.toFixed(4)}. Dispersión alrededor de media (${stats.mean.toFixed(2)}).`;
+                document.querySelectorAll('#quantTable tbody tr').forEach(row=>row.classList.remove('highlight-row'));
+            } else {
+                document.querySelectorAll('#quantTable tbody tr').forEach(row=>row.classList.remove('highlight-row'));
+            }
+            if(measure==='skew' || measure==='kurt'){
+                openShapeModal(measure, stats, data);
+            }
+        }
+    }
+
+    function openShapeModal(measure, stats, data){
+        const modal=document.getElementById('shapeModal');
+        const modalTitle=document.getElementById('modalTitle');
+        const modalCanvas=document.getElementById('modalCanvas');
+        const sketchCanvas=document.getElementById('sketchCanvas');
+        const sketchDesc=document.getElementById('sketchDescription');
+        const ctxModal=modalCanvas.getContext('2d');
+        if(modalChart) modalChart.destroy();
+        let normalPts=normalCurvePoints(stats.mean, stats.std, data.mids, Math.max(...data.freqs), data.uniform);
+        if(normalPts.length===0){
+            modalTitle.innerText=`${measure==='skew'?'Asimetría':'Curtosis'} = ${measure==='skew'?stats.skew.toFixed(4):stats.kurt.toFixed(4)} (No se puede mostrar curva de densidad, intervalos no uniformes)`;
+            modal.style.display='flex';
+            return;
+        }
+        let labels=normalPts.map(p=>p.x.toFixed(2));
+        let densityData=normalPts.map(p=>p.y);
+        if(measure==='skew'){
+            modalTitle.innerText=`📈 Asimetría = ${stats.skew.toFixed(4)} (${stats.skew>0?'cola derecha':stats.skew<0?'cola izquierda':'simétrica'})`;
+            modalChart=new Chart(ctxModal,{ type:'line', data:{ labels:labels, datasets:[{ label:'Curva de densidad', data:densityData, borderColor:'#f4d03f', fill:true, backgroundColor:'rgba(244,208,63,0.2)', tension:0.4, pointRadius:0 }] }, options:{ responsive:true, maintainAspectRatio:true, scales:{ x:{ title:{ display:true, text:data.nombre } }, y:{ title:{ display:true, text:'Densidad' } } } } });
+            // Dibujar esquema de asimetría
+            drawSkewSketch(sketchCanvas, stats.skew);
+            sketchDesc.innerText=stats.skew>0?'La cola se alarga hacia la derecha (valores altos dispersos)':stats.skew<0?'La cola se alarga hacia la izquierda (valores bajos dispersos)':'Distribución simétrica, colas equilibradas';
+        } else {
+            modalTitle.innerText=`📊 Curtosis = ${stats.kurt.toFixed(4)} (${stats.kurt>0?'leptocúrtica':stats.kurt<0?'platicúrtica':'mesocúrtica'})`;
+            modalChart=new Chart(ctxModal,{ type:'line', data:{ labels:labels, datasets:[{ label:'Apuntamiento', data:densityData, borderColor:'#5bc0ff', fill:true, backgroundColor:'rgba(91,192,255,0.2)', tension:0.4, pointRadius:0 }] }, options:{ responsive:true, maintainAspectRatio:true, scales:{ x:{ title:{ display:true, text:data.nombre } }, y:{ title:{ display:true, text:'Densidad' } } } } });
+            drawKurtosisSketch(sketchCanvas, stats.kurt);
+            sketchDesc.innerText=stats.kurt>0?'Distribución más puntiaguda que la normal (picos altos, colas gruesas)':stats.kurt<0?'Distribución más aplanada que la normal (colas ligeras)':'Distribución con apuntamiento similar a la normal (mesocúrtica)';
+        }
+        modal.style.display='flex';
+        document.querySelector('.close-modal').onclick=()=>{ modal.style.display='none'; };
+        window.onclick=(event)=>{ if(event.target===modal) modal.style.display='none'; };
+    }
+
+    function drawSkewSketch(canvas, skew){
+        const ctx=canvas.getContext('2d');
+        const w=canvas.width, h=canvas.height;
+        ctx.clearRect(0,0,w,h);
+        ctx.fillStyle='#1e3d2f'; ctx.fillRect(0,0,w,h);
+        ctx.beginPath();
+        let centerX=w/2, centerY=h-20;
+        let scale=w/6;
+        let xMin=centerX-3*scale, xMax=centerX+3*scale;
+        let step=(xMax-xMin)/100;
+        let mean=0, std=1;
+        let skewFactor=Math.min(0.9,Math.max(-0.9,skew/5));
+        for(let x=xMin; x<=xMax; x+=step){
+            let t=(x-centerX)/scale;
+            let y;
+            if(skewFactor>0){
+                y=Math.exp(-0.5*t*t)*(1+skewFactor*t*t*t);
+            } else if(skewFactor<0){
+                y=Math.exp(-0.5*t*t)*(1+skewFactor*t*t);
+            } else {
+                y=Math.exp(-0.5*t*t);
+            }
+            let py=centerY - y*80;
+            if(x===xMin) ctx.moveTo(x,py);
+            else ctx.lineTo(x,py);
+        }
+        ctx.strokeStyle='#f4d03f'; ctx.lineWidth=2; ctx.stroke();
+        ctx.fillStyle='#fff'; ctx.font='12px sans-serif';
+        ctx.fillText(skew>0?'Cola derecha →':skew<0?'← Cola izquierda':'Simétrica', centerX-40, centerY-10);
+    }
+
+    function drawKurtosisSketch(canvas, kurt){
+        const ctx=canvas.getContext('2d');
+        const w=canvas.width, h=canvas.height;
+        ctx.clearRect(0,0,w,h);
+        ctx.fillStyle='#1e3d2f'; ctx.fillRect(0,0,w,h);
+        ctx.beginPath();
+        let centerX=w/2, centerY=h-20;
+        let scale=w/6;
+        let xMin=centerX-3*scale, xMax=centerX+3*scale;
+        let step=10;
+        let normalPoints=[];
+        let kurtPoints=[];
+        for(let x=xMin; x<=xMax; x+=step){
+            let t=(x-centerX)/scale;
+            let y_normal=Math.exp(-0.5*t*t);
+            let y_kurt=Math.exp(-0.5*t*t)*(1+Math.min(1,Math.max(-0.9,kurt/5))*t*t*t*t);
+            normalPoints.push({x,y:y_normal});
+            kurtPoints.push({x,y:y_kurt});
+        }
+        ctx.strokeStyle='#5bc0ff'; ctx.lineWidth=2;
+        ctx.beginPath(); normalPoints.forEach((p,i)=>{ if(i===0) ctx.moveTo(p.x, centerY-p.y*70); else ctx.lineTo(p.x, centerY-p.y*70); }); ctx.stroke();
+        ctx.beginPath(); kurtPoints.forEach((p,i)=>{ if(i===0) ctx.moveTo(p.x, centerY-p.y*70); else ctx.lineTo(p.x, centerY-p.y*70); }); ctx.strokeStyle='#f4d03f'; ctx.stroke();
+        ctx.fillStyle='#fff'; ctx.font='10px sans-serif';
+        ctx.fillText('Normal', centerX-30, centerY-80);
+        ctx.fillText(kurt>0?'Leptocúrtica':kurt<0?'Platicúrtica':'Mesocúrtica', centerX+20, centerY-60);
+    }
+
+    // ======================== BIDIMENSIONAL ========================
+    let biChart=null;
+    function renderBidimensional(){
+        const container=document.getElementById('bi');
+        container.innerHTML=`
+            <div class="selector-pair"><span>📌 Eje X:</span><select id="xSelect"><option value="total_bill">Total bill</option><option value="tip">Tip</option><option value="size">Tamaño</option></select>
+            <span>📌 Eje Y:</span><select id="ySelect"><option value="tip">Tip</option><option value="total_bill">Total bill</option><option value="size">Tamaño</option></select>
+            <button class="small-btn" id="updateBi">Actualizar</button><button class="small-btn" id="invertBi">🔄 Invertir ejes</button></div>
+            <div class="grid-3cols"><div class="table-box"><h3>📋 Primeros 15 registros</h3><table class="data-table" id="biTable"><thead><tr><th>X</th><th>Y</th></tr></thead><tbody id="biTbody"></tbody></td><div id="corrBox" class="stats-badge">Correlación: --</div></div>
+            <div class="chart-box"><h3>📈 Dispersión + regresión</h3><canvas id="scatterCanvas"></canvas></div></div>
+        `;
+        const xVal=document.getElementById('xSelect').value, yVal=document.getElementById('ySelect').value;
+        loadScatter(xVal,yVal);
+        document.getElementById('updateBi').onclick=()=>loadScatter(document.getElementById('xSelect').value,document.getElementById('ySelect').value);
+        document.getElementById('invertBi').onclick=()=>{
+            let xSel=document.getElementById('xSelect'), ySel=document.getElementById('ySelect');
+            let temp=xSel.value; xSel.value=ySel.value; ySel.value=temp;
+            loadScatter(xSel.value,ySel.value);
+        };
+    }
+    function loadScatter(xVar,yVar){
+        const dataPoints=scatterData.map(d=>({ x:d[xVar], y:d[yVar] }));
+        const tbody=document.getElementById('biTbody');
+        tbody.innerHTML='';
+        dataPoints.slice(0,15).forEach(p=>{ let tr=document.createElement('tr'); tr.innerHTML=`<td>${p.x}</td><td>${p.y}</td>`; tbody.appendChild(tr); });
+        const ctx=document.getElementById('scatterCanvas').getContext('2d');
+        if(biChart) biChart.destroy();
+        biChart=new Chart(ctx,{ type:'scatter', data:{ datasets:[{ label:`${xVar} vs ${yVar}`, data:dataPoints, backgroundColor:'#5bc0ff', pointRadius:5, pointHoverRadius:12, pointBorderColor:'#fff' }] }, options:{ scales:{ x:{ title:{ display:true, text:xVar } }, y:{ title:{ display:true, text:yVar } } }, responsive:true, plugins:{ tooltip:{ callbacks:{ label:(ctx)=>`${xVar}: ${ctx.raw.x}, ${yVar}: ${ctx.raw.y}` } } } } });
+        let x=dataPoints.map(p=>p.x), y=dataPoints.map(p=>p.y);
+        let n=x.length, sumX=x.reduce((a,b)=>a+b,0), sumY=y.reduce((a,b)=>a+b,0), sumXY=0, sumX2=0, sumY2=0;
+        for(let i=0;i<n;i++){ sumXY+=x[i]*y[i]; sumX2+=x[i]*x[i]; sumY2+=y[i]*y[i]; }
+        let corr=(n*sumXY-sumX*sumY)/Math.sqrt((n*sumX2-sumX*sumX)*(n*sumY2-sumY*sumY));
+        let b=(n*sumXY-sumX*sumY)/(n*sumX2-sumX*sumX);
+        let a=(sumY-b*sumX)/n;
+        let xMin=Math.min(...x), xMax=Math.max(...x);
+        let lineData=[{x:xMin, y:a+b*xMin},{x:xMax, y:a+b*xMax}];
+        biChart.data.datasets.push({ label:'Regresión', data:lineData, type:'line', borderColor:'#ffaa44', borderWidth:2, fill:false, pointRadius:0 });
+        biChart.update();
+        document.getElementById('corrBox').innerHTML=`📈 Pearson: ${corr.toFixed(4)} (${corr>0?'positiva':corr<0?'negativa':'nula'})<br>📐 Recta: ${yVar} = ${a.toFixed(2)} + ${b.toFixed(4)}·${xVar}`;
+    }
+
+    function switchTab(tabId){
+        document.querySelectorAll('.slide').forEach(s=>s.classList.remove('active-slide'));
+        document.getElementById(tabId).classList.add('active-slide');
+        document.querySelectorAll('.tab-btn').forEach(btn=>btn.classList.remove('active'));
+        document.querySelector(`.tab-btn[data-tab="${tabId}"]`).classList.add('active');
+        if(tabId==='cuali') renderCualitativa();
+        if(tabId==='cuanti') renderCuantitativa('tip');
+        if(tabId==='bi') renderBidimensional();
+    }
+    document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.getAttribute('data-tab'))));
+    renderCualitativa();
+</script>
+</body>
+</html>
